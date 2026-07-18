@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  --background: #faf9f6;
+  --foreground: #2c1b18;
+  --accent-warm: #3e2723;
+  --accent-gold: #d4af37;
+  --accent-gold-bright: #ffc107;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent-warm: var(--accent-warm);
+  --color-accent-gold: var(--accent-gold);
+  --color-accent-gold-bright: var(--accent-gold-bright);
+  --font-sans: var(--font-manrope);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-manrope), Inter, system-ui, sans-serif;
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.animate-progress-indeterminate {
+  animation: progress-indeterminate 1.2s ease-in-out infinite;
+}

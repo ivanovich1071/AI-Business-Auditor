@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id          String     @id @default(cuid())
+  name        String
+  url         String
+  industry    String?
+  description String?
+  mcpData     String? // JSON blob (SQLite has no native Json type)
+  createdAt   DateTime   @default(now())
+  analyses    Analysis[]
+}
+
+model Analysis {
+  id                String   @id @default(cuid())
+  companyId         String
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  agents            String // JSON: AgentSuggestion[]
+  summary           String
+  businessProcesses String // JSON: string[]
+  pains             String // JSON: string[]
+  confidence        Float?
+  createdAt         DateTime @default(now())
+}
