@@ -15,7 +15,7 @@ export function ResultsGrid({ result }: { result: AnalysisResult }) {
   const [department, setDepartment] = useState<string | null>(null);
 
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:[height:70vh]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:h-[72vh] lg:[grid-template-rows:minmax(0,1fr)]">
       <CompanyAudit result={result} department={department} onDepartmentChange={setDepartment} />
       <AgentsList result={result} department={department} />
       <ChatPanel result={result} />

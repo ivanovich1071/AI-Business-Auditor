@@ -28,7 +28,7 @@ export function AgentsList({
       </div>
       <p className="mt-1 text-xs text-accent-warm/50">{result.summary}</p>
 
-      <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
+      <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
         {agents.map((agent, i) => (
           <AgentCard key={agent.name + i} agent={agent} rank={i + 1} />
         ))}

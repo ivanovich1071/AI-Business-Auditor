@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Search, Building2, Save, Check, Loader2 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProgressBar } from "@/components/ProgressBar";
 import { ResultsGrid } from "@/components/ResultsGrid";
 import type { AnalysisResult } from "@/types/analysis";
-
-const STORAGE_KEY = "aiba:lastResult";
 
 export default function Home() {
   const [url, setUrl] = useState("");
@@ -21,21 +19,8 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const stageTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    const cached = sessionStorage.getItem(STORAGE_KEY);
-    if (cached) {
-      try {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate from sessionStorage on mount
-        setResult(JSON.parse(cached));
-      } catch {
-        // ignore corrupted cache
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (result) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result));
-  }, [result]);
+  // Каждый заход на страницу начинается с чистого листа — результат прошлого
+  // анализа не восстанавливается (в дашборде он есть, если был сохранён).
 
   async function handleAnalyze() {
     const trimmedUrl = url.trim();

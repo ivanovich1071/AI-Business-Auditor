@@ -85,7 +85,7 @@ export function ChatPanel({ result }: { result: AnalysisResult }) {
         Вопросы строго по анализу «{result.companyName}». История сохраняется в этом браузере.
       </p>
 
-      <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
+      <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
         {messages.length === 0 && (
           <p className="text-sm text-accent-warm/50">
             Например: «Какой агент подойдёт для автоматизации отчётов?»

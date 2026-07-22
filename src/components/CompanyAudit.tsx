@@ -71,7 +71,7 @@ export function CompanyAudit({
 
       <p className="mt-4 text-sm font-semibold text-accent-warm">Бизнес-процессы</p>
       <p className="text-xs text-accent-warm/50">Нажмите на процесс — покажем задачи и результаты</p>
-      <div className="mt-2 flex-1 space-y-2 overflow-y-auto pr-1">
+      <div className="mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
         {processes.length === 0 && (
           <p className="text-sm text-accent-warm/50">Для выбранного отдела процессы не найдены.</p>
         )}
