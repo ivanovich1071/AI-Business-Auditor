@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Send, MessageCircle } from "lucide-react";
 import type { AnalysisResult } from "@/types/analysis";
 
@@ -9,10 +9,36 @@ interface ChatMessage {
   text: string;
 }
 
+function storageKey(result: AnalysisResult): string {
+  return `aiba:chat:${result.companyId ?? `url:${result.url}`}`;
+}
+
 export function ChatPanel({ result }: { result: AnalysisResult }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const key = storageKey(result);
+
+  // Hydrate history from localStorage (persists across tab close, per company).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate per company
+      setMessages(raw ? (JSON.parse(raw) as ChatMessage[]) : []);
+    } catch {
+      // ignore corrupted cache
+    }
+  }, [key]);
+
+  useEffect(() => {
+    try {
+      if (messages.length > 0) localStorage.setItem(key, JSON.stringify(messages));
+    } catch {
+      // ignore quota errors
+    }
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, key]);
 
   async function sendMessage() {
     const question = input.trim();
@@ -29,7 +55,7 @@ export function ChatPanel({ result }: { result: AnalysisResult }) {
           context: {
             companyName: result.companyName,
             industry: result.industry,
-            businessProcesses: result.businessProcesses,
+            businessProcesses: result.businessProcesses.map((p) => p.name),
             agents: result.agents.map((a) => ({ name: a.name, priority: a.priority })),
           },
         }),
@@ -50,16 +76,16 @@ export function ChatPanel({ result }: { result: AnalysisResult }) {
   }
 
   return (
-    <div className="rounded-3xl border border-accent-warm/10 bg-white/40 p-6 shadow-lg shadow-accent-warm/5">
+    <div className="flex h-full flex-col rounded-3xl border border-accent-warm/10 bg-white/40 p-5 shadow-lg shadow-accent-warm/5">
       <div className="flex items-center gap-2 text-accent-warm">
         <MessageCircle size={18} />
-        <h3 className="text-lg font-semibold">Обсудить результаты</h3>
+        <h2 className="text-lg font-semibold">Обсудить результаты</h2>
       </div>
       <p className="mt-1 text-xs text-accent-warm/50">
-        Вопросы строго по анализу «{result.companyName}» — история не сохраняется после закрытия вкладки.
+        Вопросы строго по анализу «{result.companyName}». История сохраняется в этом браузере.
       </p>
 
-      <div className="mt-4 max-h-64 space-y-3 overflow-y-auto pr-1">
+      <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
         {messages.length === 0 && (
           <p className="text-sm text-accent-warm/50">
             Например: «Какой агент подойдёт для автоматизации отчётов?»
@@ -70,14 +96,19 @@ export function ChatPanel({ result }: { result: AnalysisResult }) {
             key={i}
             className={`rounded-2xl px-4 py-2 text-sm transition-all duration-300 ${
               m.role === "user"
-                ? "ml-auto max-w-[80%] bg-accent-warm text-white"
-                : "mr-auto max-w-[80%] bg-accent-warm/5 text-foreground/90"
+                ? "ml-auto max-w-[85%] bg-accent-warm text-white"
+                : "mr-auto max-w-[85%] bg-accent-warm/5 text-foreground/90"
             }`}
           >
             {m.text}
           </div>
         ))}
-        {loading && <div className="mr-auto max-w-[80%] rounded-2xl bg-accent-warm/5 px-4 py-2 text-sm text-accent-warm/50">Печатает…</div>}
+        {loading && (
+          <div className="mr-auto max-w-[85%] rounded-2xl bg-accent-warm/5 px-4 py-2 text-sm text-accent-warm/50">
+            Печатает…
+          </div>
+        )}
+        <div ref={bottomRef} />
       </div>
 
       <div className="mt-4 flex gap-2">

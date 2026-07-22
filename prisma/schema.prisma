@@ -24,7 +24,8 @@ model Analysis {
   company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   agents            String // JSON: AgentSuggestion[]
   summary           String
-  businessProcesses String // JSON: string[]
+  businessProcesses String // JSON: BusinessProcess[] ({name, department})
+  departments       String @default("[]") // JSON: string[]
   pains             String // JSON: string[]
   confidence        Float?
   createdAt         DateTime @default(now())

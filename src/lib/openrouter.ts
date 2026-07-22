@@ -3,9 +3,12 @@ import {
   AgentsResponseSchema,
   ChatAnswerSchema,
   IndustryAnalysisSchema,
+  ProcessDetailSchema,
+  normalizeBusinessProcesses,
   type AgentsResponse,
   type ChatAnswer,
   type IndustryAnalysis,
+  type ProcessDetail,
 } from "@/types/analysis";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -75,21 +78,37 @@ export async function analyzeIndustry(params: {
   siteText: string;
   mcpData: McpData;
 }): Promise<IndustryAnalysis> {
-  const prompt = `Проанализируй текст сайта и данные MCP. Определи отрасль компании, её бизнес-процессы
-и основные боли. Ответь ТОЛЬКО в формате JSON со схемой:
-{"industry": string|null, "business_processes": string[], "pains": string[], "confidence": number,
- "sources": string[], "message"?: string}
+  const prompt = `Проанализируй текст сайта и данные MCP. Определи:
+1. industry — отрасль компании.
+2. departments — список из 3–7 подразделений/отделов компании (например: «Продажи», «Производство»,
+   «Логистика», «Маркетинг», «HR», «Клиентская поддержка», «Бухгалтерия», «IT»). Опирайся на то, что
+   реально следует из текста и отрасли; не выдумывай отделы, которых заведомо не может быть.
+3. business_processes — ключевые бизнес-процессы. Каждый процесс — объект {name, department}, где
+   department — один из перечисленных выше отделов, к которому этот процесс относится (или null).
+4. pains — основные боли/проблемы, которые видны из данных.
+5. confidence — уверенность 0..1. sources — на что опирался вывод.
+
+Ответь ТОЛЬКО в формате JSON со схемой:
+{"industry": string|null, "departments": string[],
+ "business_processes": [{"name": string, "department": string|null}],
+ "pains": string[], "confidence": number, "sources": string[], "message"?: string}
 
 Данные:
 ${JSON.stringify({ url: params.url, site_text: params.siteText, mcp_data: params.mcpData }, null, 2)}`;
 
   try {
     const raw = await callOpenRouter(prompt, 0.2);
-    const parsed = IndustryAnalysisSchema.parse(extractJson(raw));
-    return parsed;
+    const obj = extractJson(raw) as Record<string, unknown>;
+    // Normalize business_processes so string[] responses still validate.
+    if (obj && typeof obj === "object") {
+      obj.business_processes = normalizeBusinessProcesses(obj.business_processes);
+      if (!Array.isArray(obj.departments)) obj.departments = [];
+    }
+    return IndustryAnalysisSchema.parse(obj);
   } catch (err) {
     return IndustryAnalysisSchema.parse({
       industry: null,
+      departments: [],
       business_processes: [],
       pains: [],
       confidence: null,
@@ -105,20 +124,42 @@ ${JSON.stringify({ url: params.url, site_text: params.siteText, mcp_data: params
 export async function generateAgents(params: {
   companyName: string;
   industry: string;
-  businessProcesses: string[];
+  departments: string[];
+  businessProcesses: { name: string; department: string | null }[];
   pains: string[];
 }): Promise<AgentsResponse> {
-  const prompt = `На основе отрасли '${params.industry}' и бизнес-процессов ${JSON.stringify(
-    params.businessProcesses
-  )} (боли: ${JSON.stringify(params.pains)}) предложи 5–10 AI-агентов для компании
-'${params.companyName}'. Для каждого агента укажи: name (на русском), description (что делает),
-benefits (string[], польза для компании), why (почему подходит именно этой компании), priority
-(1-10, где 10 — максимально полезный). Ответь ТОЛЬКО в формате JSON со схемой:
-{"agents": [{"name": string, "description": string, "benefits": string[], "why": string, "priority": number}],
+  const prompt = `На основе отрасли '${params.industry}', отделов ${JSON.stringify(
+    params.departments
+  )} и бизнес-процессов ${JSON.stringify(params.businessProcesses)} (боли: ${JSON.stringify(
+    params.pains
+  )}) предложи 5–10 AI-агентов для компании '${params.companyName}'. Для каждого агента укажи:
+name (на русском), description (что делает), benefits (string[], польза для компании),
+why (почему подходит именно этой компании), priority (1-10, где 10 — максимально полезный),
+department (к какому из перечисленных отделов относится агент, или null). Ответь ТОЛЬКО в формате JSON:
+{"agents": [{"name": string, "description": string, "benefits": string[], "why": string, "priority": number, "department": string|null}],
  "summary": string}`;
 
   const raw = await callOpenRouter(prompt, 0.4);
   return AgentsResponseSchema.parse(extractJson(raw));
+}
+
+export async function generateProcessDetail(params: {
+  companyName: string;
+  industry: string | null;
+  process: string;
+  departments: string[];
+}): Promise<ProcessDetail> {
+  const prompt = `Детализируй бизнес-процесс "${params.process}" компании '${params.companyName}'
+(отрасль: ${params.industry ?? "не определена"}). Укажи:
+description — краткое описание процесса;
+tasks — конкретные задачи внутри процесса (string[]);
+results — ожидаемые результаты процесса (string[]);
+department — ответственный отдел из списка ${JSON.stringify(params.departments)} (или null).
+Не обещай конкретных процентов. Ответь ТОЛЬКО в формате JSON:
+{"description": string, "tasks": string[], "results": string[], "department": string|null}`;
+
+  const raw = await callOpenRouter(prompt, 0.3);
+  return ProcessDetailSchema.parse(extractJson(raw));
 }
 
 export async function answerChatQuestion(params: {

@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { AnalysisResult } from "@/types/analysis";
+import {
+  normalizeAgents,
+  normalizeBusinessProcesses,
+  type AgentSuggestion,
+  type AnalysisResult,
+  type BusinessProcess,
+} from "@/types/analysis";
+
+function parseStringArray(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,6 +28,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Анализ не найден." }, { status: 404 });
   }
 
+  let businessProcesses: BusinessProcess[];
+  let agents: AgentSuggestion[];
+  try {
+    businessProcesses = normalizeBusinessProcesses(JSON.parse(analysis.businessProcesses));
+  } catch {
+    businessProcesses = [];
+  }
+  try {
+    agents = normalizeAgents(JSON.parse(analysis.agents));
+  } catch {
+    agents = [];
+  }
+
   const result: AnalysisResult = {
     id: analysis.id,
     companyId: analysis.companyId,
@@ -19,13 +48,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     url: analysis.company.url,
     industry: analysis.company.industry,
     description: analysis.company.description,
-    businessProcesses: JSON.parse(analysis.businessProcesses),
-    pains: JSON.parse(analysis.pains),
+    businessProcesses,
+    departments: parseStringArray(analysis.departments),
+    pains: parseStringArray(analysis.pains),
     confidence: analysis.confidence,
-    agents: JSON.parse(analysis.agents),
+    agents,
     summary: analysis.summary,
     createdAt: analysis.createdAt.toISOString(),
     warnings: [],
+    saved: true,
   };
 
   return NextResponse.json(result);

@@ -23,8 +23,8 @@
 | БД | SQLite + Prisma ORM |
 | Парсинг сайтов | Cheerio (статика). Puppeteer для SPA — не подключён, задел на будущее |
 | AI-модель | Qwen (через OpenRouter API), ключ в `.env` (`OPENROUTER_API_KEY`) |
-| MCP / внешние данные | DuckDuckGo Instant Answer API (бесплатно, без ключа) — единственный источник на старте.
-SerpAPI / OpenCorporates / Clearbit / Hunter.io — опциональные модули, включаются, если в `.env` появится соответствующий ключ (`SERPAPI_KEY`, `OPENCORPORATES_API_KEY`, `CLEARBIT_API_KEY`, `HUNTER_API_KEY`); без ключа модуль пропускается без ошибки |
+| Веб-поиск (name→URL) | `src/lib/mcp/websearch.ts` — бесключевой DuckDuckGo (lite GET + Instant Answer API). Тот же источник, что оборачивает MCP `@oevortex/ddg_search`, но напрямую: задеплоенный Next.js не достучится до MCP-серверов Claude Code. `.mcp.json` регистрирует ddg_search для самого Claude Code (агента), не для рантайма |
+| MCP / внешние данные | DuckDuckGo (без ключа). SerpAPI / OpenCorporates / Clearbit / Hunter.io — опциональные модули (`src/lib/mcp/optional.ts`), включаются при наличии ключа в `.env`; без ключа модуль пропускается без ошибки |
 
 ---
 
@@ -71,26 +71,44 @@ ai-business-auditor/
 ## 4. Архитектура pipeline
 
 ```
-URL → parser.ts (crawl до N страниц, игнор ошибок)
-    → mcp/index.ts (DuckDuckGo + опционально SerpAPI/OpenCorporates/Clearbit/Hunter.io)
-    → openrouter.ts: Блок 1 — определение отрасли/бизнес-процессов/болей (JSON)
-    → openrouter.ts: Блок 2 — генерация 5–10 AI-агентов, ранжированных (JSON)
-    → Prisma: сохранение Company + Analysis
-    → Frontend: рендер результатов, прогресс-бар на каждом шаге
+{url?, name?} → если нет url, resolveCompanySite(name) через websearch.ts → url
+    → parser.ts (crawl до N страниц, игнор ошибок; http-fallback при битом TLS)
+    → mcp/index.ts (DuckDuckGo + опционально доп. источники)
+    → openrouter.ts Блок 1: industry + departments[] + business_processes[{name,department}] + pains (JSON)
+    → openrouter.ts Блок 2: 5–10 AI-агентов, ранжированных, с department (JSON)
+    → возврат ЭФЕМЕРНОГО результата (id=null, saved=false) — БЕЗ записи в БД
+Пользователь жмёт «Сохранить в дашборд» → POST /api/analyses → Company + Analysis в БД.
 ```
 
-Чат (`/api/chat`) использует Блок 3 системного промпта: контекст = сохранённый анализ,
-тема строго ограничена (industry/business_processes/agents), офф-топик → отказ на русском.
+- Детализация процесса по клику: `POST /api/process-detail` → Блок openrouter (description/tasks/results/department), on-demand, не хранится.
+- Чат (`/api/chat`) — Блок 3: контекст = анализ, тема ограничена, офф-топик → отказ. История в localStorage по companyId.
+- Дропдаун отделов фильтрует бизнес-процессы (по `department`) и агентов.
+
+### Ключевые эндпоинты
+| Метод | Путь | Назначение |
+|-------|------|-----------|
+| POST | `/api/analyze` | `{url?, name?}` → эфемерный результат (не сохраняет) |
+| POST | `/api/analyses` | сохранить результат в дашборд |
+| GET | `/api/analyses` / `/api/analyses/{id}` | список / карточка |
+| DELETE | `/api/analyses/{id}` | удалить |
+| POST | `/api/process-detail` | детализация бизнес-процесса |
+| POST | `/api/chat` | чат по контексту анализа |
+
+### Страницы
+`/` — 3 колонки (аудит+отделы+кликабельные процессы · агенты со скроллом · чат) + поля URL и Название + «Сохранить».
+`/company/[id]` — детальная карточка (та же 3-колоночная сетка) + «Назад к дашборду».
+`/dashboard` — карточки-кнопки (весь блок кликабелен → `/company/[id]`) + «Новый анализ».
 
 ---
 
 ## 5. Модель данных (Prisma)
 
 - **Company** — `id, name, url, industry, description, mcpData (Json), createdAt`
-- **Analysis** — `id, companyId → Company, agents (Json[]), summary, businessProcesses (Json), pains (Json), confidence, createdAt`
+- **Analysis** — `id, companyId → Company, agents (Json), summary, businessProcesses (Json: {name,department}[]), departments (Json: string[]), pains (Json), confidence, createdAt`
 
-Агенты хранятся как JSON-массив внутри `Analysis.agents` (не отдельная таблица) — соответствует
-формату ответа AI (Блок 2 системного промпта) и избавляет от лишней нормализации для MVP.
+Агенты и процессы хранятся JSON-строками. Старые записи (businessProcesses как string[], без
+departments) нормализуются на чтении: `normalizeBusinessProcesses` / `normalizeAgents` в
+`src/types/analysis.ts`. Миграции: `add_departments` добавила колонку `departments`.
 
 ---
 

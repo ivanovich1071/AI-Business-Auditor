@@ -12,6 +12,11 @@ export function AgentCard({ agent, rank }: { agent: AgentSuggestion; rank: numbe
           <div>
             <p className="text-xs font-medium text-accent-warm/50">#{rank}</p>
             <h3 className="text-lg font-semibold">{agent.name}</h3>
+            {agent.department && (
+              <span className="mt-1 inline-block rounded-full bg-accent-warm/5 px-2 py-0.5 text-xs text-accent-warm/60">
+                {agent.department}
+              </span>
+            )}
           </div>
         </div>
         <span className="rounded-full bg-accent-gold/15 px-3 py-1 text-sm font-semibold text-accent-warm">
