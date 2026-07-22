@@ -12,6 +12,8 @@
 
 Полное ТЗ и системный промпт для AI см. в [`docs/TZ.md`](docs/TZ.md) и [`docs/SYSTEM_PROMPT.md`](docs/SYSTEM_PROMPT.md).
 
+Скилл бэкенда (в т.ч. **паттерн подключения MCP** в AI-ассистентах): [`.claude/skills/backend/SKILL.md`](.claude/skills/backend/SKILL.md).
+
 ---
 
 ## 2. Стек
