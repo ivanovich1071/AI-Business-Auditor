@@ -237,6 +237,23 @@ function detectAllowedLangPrefixes(startUrl: URL, startHtml: string | null): Set
 
 function buildMarkdown($: cheerio.CheerioAPI, url: URL, title: string): string {
   $("script, style, noscript, svg, iframe, template").remove();
+  // Absolutize links and images so the viewer and exports point at the original
+  // site instead of resolving relative hrefs against the app's own domain.
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href");
+    if (!href) return;
+    const abs = resolveCrawlUrl(href, url);
+    if (abs) $(el).attr("href", abs.toString());
+  });
+  $("img[src]").each((_, el) => {
+    const src = $(el).attr("src");
+    if (!src) return;
+    try {
+      $(el).attr("src", new URL(src, url).toString());
+    } catch {
+      // leave the original src
+    }
+  });
   const bodyHtml = $("body").html() ?? $.html() ?? "";
   const body = htmlConverter
     .translate(bodyHtml)

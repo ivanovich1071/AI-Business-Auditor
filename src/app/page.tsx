@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Search, Building2, Save, Check, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Building2, Save, Check, Loader2, Radar } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProgressBar } from "@/components/ProgressBar";
@@ -9,6 +10,7 @@ import { ResultsGrid } from "@/components/ResultsGrid";
 import type { AnalysisResult } from "@/types/analysis";
 
 export default function Home() {
+  const router = useRouter();
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,6 +19,7 @@ export default function Home() {
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const [crawling, setCrawling] = useState(false);
   const stageTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Каждый заход на страницу начинается с чистого листа — результат прошлого
@@ -76,6 +79,43 @@ export default function Home() {
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Launch a full-site crawl for the analyzed company: saves the analysis first so
+  // both results (analysis + crawl) end up in the dashboard linked to one company.
+  async function handleCrawl() {
+    if (!result || crawling) return;
+    setError(null);
+    setCrawling(true);
+    try {
+      let saved = result;
+      if (!result.saved) {
+        const saveRes = await fetch("/api/analyses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(result),
+        });
+        if (saveRes.ok) {
+          saved = (await saveRes.json()) as AnalysisResult;
+          setResult(saved);
+        }
+      }
+      const res = await fetch("/api/crawl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: saved.url, companyId: saved.companyId ?? undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Не удалось запустить обход. Попробуйте ещё раз.");
+        return;
+      }
+      router.push(`/crawl/${data.id}`);
+    } catch {
+      setError("Не удалось запустить обход. Попробуйте ещё раз.");
+    } finally {
+      setCrawling(false);
     }
   }
 
@@ -141,6 +181,24 @@ export default function Home() {
                 ) : (
                   <>
                     <Save size={16} /> Сохранить в дашборд
+                  </>
+                )}
+              </button>
+            )}
+            {result && (
+              <button
+                onClick={handleCrawl}
+                disabled={crawling}
+                className="flex items-center gap-2 rounded-2xl border border-accent-warm/20 px-5 py-3 text-sm font-medium text-accent-warm transition-all duration-300 hover:bg-accent-warm/5 disabled:opacity-70"
+                title="Сохранит анализ и запустит полный обход сайта в Markdown"
+              >
+                {crawling ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Запускаем обход…
+                  </>
+                ) : (
+                  <>
+                    <Radar size={16} /> Обойти весь сайт
                   </>
                 )}
               </button>
