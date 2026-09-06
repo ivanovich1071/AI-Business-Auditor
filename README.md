@@ -17,6 +17,9 @@ AI-агентов** для автоматизации, ранжированны�
 - **Рекомендации AI-агентов** — 5–10 штук, ранжированы (1–10), с пользой и обоснованием.
 - **Чат по результатам** — вопросы строго в рамках анализа; история в `localStorage` по компании.
 - **Дашборд** — сохранённые анализы карточками, поиск, статистика по отраслям, детальная карточка.
+- **Краулер сайта** — полный обход всех разделов/подразделов/вкладок (BFS + sitemap.xml, robots.txt,
+  настраиваемые лимиты), конвертация каждой страницы в **Markdown**, веб-просмотрщик с деревом
+  разделов и поиском, скачивание (**ZIP / общий .md / постранично**), список обходов на дашборде.
 - **Обработка ошибок** — недоступный сайт, битый TLS (http-fallback), лимиты, сбой ИИ — понятные сообщения на русском.
 
 Интерфейс — одна широкая страница с результатом в **3 равные колонки**: аудит · агенты · чат.
@@ -88,6 +91,31 @@ HUNTER_API_KEY=
 Детализация процесса и чат — отдельные вызовы ИИ по запросу пользователя. Все ответы ИИ — строго
 JSON и валидируются Zod-схемами (`src/types/analysis.ts`).
 
+### Краулер сайта (полный обход + Markdown)
+
+Отдельный контур, не влияющий на быстрый анализ:
+
+```
+POST /api/crawl {url, maxPages=200, maxDepth=5, respectRobots=true, companyId?}
+   └─ CrawlJob в SQLite → фоновый обход (src/lib/crawler.ts, без ожидания ответа)
+      ├─ resolveStartUrl (https → http-fallback) → robots.txt (Disallow/Allow + Sitemap:)
+      ├─ sitemap.xml (+1 уровень индекса) сеется в очередь первыми, далее BFS по <a href>
+      ├─ волны по 3 запроса с паузой 300 мс, только тот же origin, только text/html
+      ├─ cheerio-преклин → node-html-markdown; капы: 3 МБ HTML, 150 КБ markdown на страницу
+      └─ прогресс пишется в БД после каждой волны (pagesDone/pagesFailed)
+Просмотрщик /crawl/{id}  ← живой опрос раз в 2 с, дерево страниц по разделам, поиск, рендер markdown
+Экспорт: /api/crawl/{id}/export?format=zip|md  ·  постранично ?download=1
+```
+
+- Запуск: страница **/crawler** или кнопка «Обойти весь сайт» в карточке компании (связь с Company по
+  `companyId`/hostname). Список обходов — вкладка «Обходы сайтов» на дашборде.
+- Прерывание: «Остановить» в просмотрщике (`DELETE ?mode=cancel`) — job получит статус `cancelled`,
+  собранные страницы сохранятся; `DELETE` без режима — полное удаление вместе со страницами.
+- Обход живёт в памяти процесса: после перезапуска сервера зависший в `running` job помечается
+  ошибкой при первом же чтении (порог 30 минут). pm2 cluster-режим не поддерживается (один инстанс).
+- Ограничение: страницы, контент которых подгружается только через JS (SPA), спаршены частично —
+  fetch-подход без headless-браузера (как и у основного парсера).
+
 ### Основные эндпоинты
 
 | Метод | Путь | Назначение |
@@ -98,6 +126,11 @@ JSON и валидируются Zod-схемами (`src/types/analysis.ts`).
 | DELETE | `/api/analyses/{id}` | Удалить |
 | POST | `/api/process-detail` | Детализация бизнес-процесса |
 | POST | `/api/chat` | Чат по контексту анализа |
+| POST | `/api/crawl` | Запустить полный обход `{url, maxPages?, maxDepth?, respectRobots?}` |
+| GET | `/api/crawl`, `/api/crawl/{id}` | Список обходов / статус + список страниц |
+| DELETE | `/api/crawl/{id}[?mode=cancel]` | Удалить / остановить (страницы сохраняются) |
+| GET | `/api/crawl/{id}/pages/{pageId}[?download=1]` | Markdown страницы / скачивание |
+| GET | `/api/crawl/{id}/export?format=zip\|md` | ZIP-архив или один общий .md |
 
 ---
 
@@ -110,10 +143,12 @@ AI-Business-Auditor/
 ├── docs/                     # TZ.md (ТЗ) + SYSTEM_PROMPT.md (системный промпт ИИ)
 ├── prisma/                   # schema.prisma + миграции (SQLite)
 ├── src/
-│   ├── app/                  # page.tsx, dashboard, company/[id], api/**, layout, globals.css
+│   ├── app/                  # page.tsx, dashboard, company/[id], crawler, crawl/[id], api/**
 │   ├── components/           # Header, Footer, ResultsGrid, CompanyAudit, AgentsList,
-│   │                         #   AgentCard, ChatPanel, DepartmentSelect, ProcessDetailPopup, ProgressBar
-│   ├── lib/                  # parser, openrouter, prisma, security, mcp/{websearch,duckduckgo,optional,index}
+│   │                         #   AgentCard, ChatPanel, DepartmentSelect, ProcessDetailPopup,
+│   │                         #   ProgressBar, CompanyCrawls, MarkdownView
+│   ├── lib/                  # parser, crawler (полный обход), openrouter, prisma, security,
+│   │                         #   mcp/{websearch,duckduckgo,optional,index}
 │   └── types/analysis.ts     # Zod-схемы + типы + нормализация старых записей
 └── CLAUDE.md                 # архитектура и правила проекта для Claude Code
 ```
@@ -124,6 +159,8 @@ AI-Business-Auditor/
 
 - **Company** — `id, name, url, industry, description, mcpData, createdAt`
 - **Analysis** — `id, companyId, agents, summary, businessProcesses ({name,department}[]), departments (string[]), pains, confidence, createdAt`
+- **CrawlJob** — `id, companyId?, startUrl, status (queued|running|done|error|cancelled), maxPages, maxDepth, pagesDone, pagesFailed, error, createdAt, finishedAt`
+- **CrawledPage** — `id, crawlId, url (уникально в рамках обхода), title, markdown, depth, statusCode, fetchedAt`
 
 JSON хранится строками (в SQLite нет native Json). Старые записи (без `departments`, процессы как
 `string[]`) нормализуются при чтении — `normalizeBusinessProcesses` / `normalizeAgents`.
@@ -161,7 +198,9 @@ pm2 настроен на автозапуск при перезагрузке. 
 
 - API-ключи только в `.env` (не в репозитории).
 - Проверка URL от SSRF/локальных адресов (`isUrlSafe`) перед краулингом.
-- Rate limiting: 10 запросов/мин с одного IP на публичных POST-роутах.
+- Rate limiting: 10 запросов/мин с одного IP на публичных POST-роутах; запуски краула — не чаще
+  5 раз за 5 минут (`checkCrawlLimit`).
+- Краулер: только тот же origin, уважение robots.txt (отключается в UI), паузы между волнами запросов.
 - Личные данные пользователей не сохраняются; история чата — только в браузере (`localStorage`).
 
 ---

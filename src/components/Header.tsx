@@ -11,12 +11,20 @@ export function Header() {
           </span>
           <span className="text-2xl font-semibold tracking-tight">AI Business Auditor</span>
         </Link>
-        <Link
-          href="/dashboard"
-          className="text-sm font-medium text-accent-warm/70 hover:text-accent-warm transition-all duration-300"
-        >
-          Дашборд
-        </Link>
+        <div className="flex items-center gap-5">
+          <Link
+            href="/crawler"
+            className="text-sm font-medium text-accent-warm/70 hover:text-accent-warm transition-all duration-300"
+          >
+            Краулер
+          </Link>
+          <Link
+            href="/dashboard"
+            className="text-sm font-medium text-accent-warm/70 hover:text-accent-warm transition-all duration-300"
+          >
+            Дашборд
+          </Link>
+        </div>
       </div>
     </header>
   );

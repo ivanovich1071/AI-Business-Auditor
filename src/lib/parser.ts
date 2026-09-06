@@ -4,7 +4,7 @@ const MAX_PAGES = 8;
 const MAX_CHARS_PER_PAGE = 6000;
 const MAX_TOTAL_CHARS = 20000;
 const FETCH_TIMEOUT_MS = 8000;
-const PRIORITY_PATH_HINTS = [
+export const PRIORITY_PATH_HINTS = [
   "about",
   "o-nas",
   "o_nas",
@@ -26,7 +26,7 @@ interface FetchedPage {
   text: string;
 }
 
-function normalizeUrl(input: string): string {
+export function normalizeUrl(input: string): string {
   let url = input.trim();
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
@@ -38,7 +38,7 @@ function hadExplicitScheme(input: string): boolean {
   return /^https?:\/\//i.test(input.trim());
 }
 
-async function fetchWithTimeout(url: string): Promise<Response> {
+export async function fetchWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -75,7 +75,7 @@ function collectInternalLinks($: cheerio.CheerioAPI, baseUrl: string): string[] 
       if (resolved.origin !== origin) return;
       resolved.hash = "";
       const clean = resolved.toString();
-      if (/\.(pdf|jpg|jpeg|png|gif|svg|zip|docx?|xlsx?|mp4|css|js)$/i.test(clean)) return;
+      if (isNonHtmlPath(resolved.pathname)) return;
       links.add(clean);
     } catch {
       // ignore invalid URLs
@@ -86,6 +86,12 @@ function collectInternalLinks($: cheerio.CheerioAPI, baseUrl: string): string[] 
     const bScore = PRIORITY_PATH_HINTS.some((hint) => b.toLowerCase().includes(hint)) ? 0 : 1;
     return aScore - bScore;
   });
+}
+
+const NON_HTML_EXTENSIONS = /\.(pdf|jpg|jpeg|png|gif|svg|zip|docx?|xlsx?|mp4|css|js)$/i;
+
+export function isNonHtmlPath(pathname: string): boolean {
+  return NON_HTML_EXTENSIONS.test(pathname);
 }
 
 const GENERIC_TITLE_WORDS = new Set(["home", "index", "главная", "welcome"]);

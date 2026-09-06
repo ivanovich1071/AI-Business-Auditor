@@ -16,6 +16,7 @@ model Company {
   mcpData     String? // JSON blob (SQLite has no native Json type)
   createdAt   DateTime   @default(now())
   analyses    Analysis[]
+  crawls      CrawlJob[]
 }
 
 model Analysis {
@@ -28,5 +29,36 @@ model Analysis {
   departments       String @default("[]") // JSON: string[]
   pains             String // JSON: string[]
   confidence        Float?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime   @default(now())
+}
+
+model CrawlJob {
+  id         String        @id @default(cuid())
+  companyId  String?
+  company    Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  startUrl   String
+  status     String        @default("queued") // queued | running | done | error | cancelled
+  maxPages   Int           @default(200)
+  maxDepth   Int           @default(5)
+  pagesDone  Int           @default(0)
+  pagesFailed Int          @default(0)
+  error      String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  finishedAt DateTime?
+  pages      CrawledPage[]
+}
+
+model CrawledPage {
+  id         String   @id @default(cuid())
+  crawlId    String
+  crawl      CrawlJob @relation(fields: [crawlId], references: [id], onDelete: Cascade)
+  url        String
+  title      String?
+  markdown   String
+  depth      Int      @default(0)
+  statusCode Int?
+  fetchedAt  DateTime @default(now())
+
+  @@unique([crawlId, url])
 }

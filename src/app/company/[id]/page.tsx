@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ResultsGrid } from "@/components/ResultsGrid";
+import { CompanyCrawls } from "@/components/CompanyCrawls";
 import type { AnalysisResult } from "@/types/analysis";
 
 export default function CompanyDetailPage() {
@@ -59,6 +60,7 @@ export default function CompanyDetailPage() {
         {result && (
           <div className="mt-6">
             <ResultsGrid result={result} />
+            <CompanyCrawls url={result.url} companyId={result.companyId} />
           </div>
         )}
       </main>

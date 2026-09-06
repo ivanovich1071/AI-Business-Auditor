@@ -1,7 +1,12 @@
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 10;
 
+// Full-site crawls are heavy (minutes of outbound requests) — stricter window.
+const CRAWL_LIMIT_WINDOW_MS = 5 * 60_000;
+const CRAWL_LIMIT_MAX = 5;
+
 const hits = new Map<string, number[]>();
+const crawlHits = new Map<string, number[]>();
 
 export function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -12,6 +17,18 @@ export function checkRateLimit(ip: string): boolean {
   }
   timestamps.push(now);
   hits.set(ip, timestamps);
+  return true;
+}
+
+export function checkCrawlLimit(ip: string): boolean {
+  const now = Date.now();
+  const timestamps = (crawlHits.get(ip) ?? []).filter((t) => now - t < CRAWL_LIMIT_WINDOW_MS);
+  if (timestamps.length >= CRAWL_LIMIT_MAX) {
+    crawlHits.set(ip, timestamps);
+    return false;
+  }
+  timestamps.push(now);
+  crawlHits.set(ip, timestamps);
   return true;
 }
 
