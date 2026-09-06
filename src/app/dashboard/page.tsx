@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { downloadViaBlob, hostnameOf } from "@/lib/download";
 
 interface AnalysisSummary {
   id: string;
@@ -303,14 +304,19 @@ export default function DashboardPage() {
                         className="animate-spin text-accent-gold"
                       />
                     )}
-                    <a
-                      href={`/api/crawl/${crawl.id}/export?format=zip`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-warm/10 text-accent-warm transition-all duration-300 hover:bg-accent-warm/20"
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadViaBlob(
+                          `/api/crawl/${crawl.id}/export?format=zip`,
+                          `${hostnameOf(crawl.startUrl)}-crawl.zip`
+                        ).catch((err) => console.error("[dashboard] zip download failed:", err));
+                      }}
+                      className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-accent-warm/10 text-accent-warm transition-all duration-300 hover:bg-accent-warm/20"
                       title="Скачать ZIP"
                     >
                       <FileArchive size={16} />
-                    </a>
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

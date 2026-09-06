@@ -16,6 +16,7 @@ import {
 import { MarkdownView } from "@/components/MarkdownView";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { downloadViaBlob, fileNameFromPageUrl, hostnameOf } from "@/lib/download";
 
 interface CrawlPageMeta {
   id: string;
@@ -253,18 +254,28 @@ export default function CrawlViewerPage() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <a
-                href={`/api/crawl/${job.id}/export?format=zip`}
-                className="flex items-center gap-2 rounded-xl bg-accent-warm/10 px-3 py-2 text-sm text-accent-warm transition-all duration-300 hover:bg-accent-warm/20"
+              <button
+                onClick={() =>
+                  downloadViaBlob(
+                    `/api/crawl/${job.id}/export?format=zip`,
+                    `${hostnameOf(job.startUrl)}-crawl.zip`
+                  ).catch((err) => console.error("[crawl] zip download failed:", err))
+                }
+                className="flex cursor-pointer items-center gap-2 rounded-xl bg-accent-warm/10 px-3 py-2 text-sm text-accent-warm transition-all duration-300 hover:bg-accent-warm/20"
               >
                 <FileArchive size={15} /> ZIP
-              </a>
-              <a
-                href={`/api/crawl/${job.id}/export?format=md`}
-                className="flex items-center gap-2 rounded-xl bg-accent-warm/10 px-3 py-2 text-sm text-accent-warm transition-all duration-300 hover:bg-accent-warm/20"
+              </button>
+              <button
+                onClick={() =>
+                  downloadViaBlob(
+                    `/api/crawl/${job.id}/export?format=md`,
+                    `${hostnameOf(job.startUrl)}-crawl.md`
+                  ).catch((err) => console.error("[crawl] md download failed:", err))
+                }
+                className="flex cursor-pointer items-center gap-2 rounded-xl bg-accent-warm/10 px-3 py-2 text-sm text-accent-warm transition-all duration-300 hover:bg-accent-warm/20"
               >
                 <FileText size={15} /> Общий .md
-              </a>
+              </button>
               {isActive && (
                 <button
                   onClick={handleCancel}
@@ -354,12 +365,18 @@ export default function CrawlViewerPage() {
                 )}
               </div>
               {selectedId && (
-                <a
-                  href={`/api/crawl/${job.id}/pages/${selectedId}?download=1`}
-                  className="flex shrink-0 items-center gap-2 rounded-xl bg-accent-warm/10 px-3 py-2 text-sm text-accent-warm transition-all duration-300 hover:bg-accent-warm/20"
+                <button
+                  onClick={() =>
+                    pageContent &&
+                    downloadViaBlob(
+                      `/api/crawl/${job.id}/pages/${selectedId}?download=1`,
+                      fileNameFromPageUrl(pageContent.url)
+                    ).catch((err) => console.error("[crawl] page download failed:", err))
+                  }
+                  className="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-accent-warm/10 px-3 py-2 text-sm text-accent-warm transition-all duration-300 hover:bg-accent-warm/20"
                 >
                   <Download size={15} /> Скачать .md
-                </a>
+                </button>
               )}
             </div>
             <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-2">
