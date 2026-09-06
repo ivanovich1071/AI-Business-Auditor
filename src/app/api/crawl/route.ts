@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
     maxPages?: number;
     maxDepth?: number;
     respectRobots?: boolean;
+    skipLangVersions?: boolean;
     companyId?: string;
   };
   try {
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest) {
   const maxPages = clampInt(body.maxPages, 1, MAX_PAGES_LIMIT, 200);
   const maxDepth = clampInt(body.maxDepth, 1, MAX_DEPTH_LIMIT, 5);
   const respectRobots = body.respectRobots !== false;
+  const skipLangVersions = body.skipLangVersions !== false;
 
   // Link the crawl to a company: explicit id wins, otherwise match by hostname.
   let companyId: string | null = body.companyId?.trim() || null;
@@ -84,7 +86,14 @@ export async function POST(req: NextRequest) {
   });
 
   // Fire-and-forget: the crawl outlives this HTTP request; progress lands in the DB.
-  void runCrawl({ jobId: job.id, startUrl: job.startUrl, maxPages, maxDepth, respectRobots });
+  void runCrawl({
+    jobId: job.id,
+    startUrl: job.startUrl,
+    maxPages,
+    maxDepth,
+    respectRobots,
+    skipLangVersions,
+  });
 
   return NextResponse.json({ id: job.id });
 }

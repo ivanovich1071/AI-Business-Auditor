@@ -12,6 +12,7 @@ export default function CrawlerPage() {
   const [maxPages, setMaxPages] = useState(200);
   const [maxDepth, setMaxDepth] = useState(5);
   const [respectRobots, setRespectRobots] = useState(true);
+  const [skipLangVersions, setSkipLangVersions] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,7 +25,7 @@ export default function CrawlerPage() {
       const res = await fetch("/api/crawl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: trimmed, maxPages, maxDepth, respectRobots }),
+        body: JSON.stringify({ url: trimmed, maxPages, maxDepth, respectRobots, skipLangVersions }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -64,7 +65,7 @@ export default function CrawlerPage() {
             />
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="text-sm font-medium text-accent-warm/70">Макс. страниц</label>
               <input
@@ -99,6 +100,21 @@ export default function CrawlerPage() {
                 }`}
               >
                 {respectRobots ? "Учитывать" : "Игнорировать"}
+              </button>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-accent-warm/70">Языковые версии</label>
+              <button
+                type="button"
+                onClick={() => setSkipLangVersions((v) => !v)}
+                className={`mt-2 w-full rounded-2xl border px-4 py-2.5 text-sm font-medium transition-all duration-300 ${
+                  skipLangVersions
+                    ? "border-accent-gold/40 bg-accent-gold/10 text-accent-warm"
+                    : "border-accent-warm/15 bg-white text-accent-warm/50 hover:bg-accent-warm/5"
+                }`}
+                title="Ссылки вида /by/, /en/ и т.п. на языки, отличные от языка главной, пропускаются"
+              >
+                {skipLangVersions ? "Только язык сайта" : "Все языки"}
               </button>
             </div>
           </div>

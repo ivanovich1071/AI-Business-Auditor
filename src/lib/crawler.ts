@@ -64,16 +64,23 @@ export interface StartCrawlOptions {
   maxPages: number;
   maxDepth: number;
   respectRobots: boolean;
+  skipLangVersions: boolean;
 }
 
 export async function runCrawl(opts: StartCrawlOptions): Promise<void> {
-  const { jobId, maxPages, maxDepth, respectRobots } = opts;
+  const { jobId, maxPages, maxDepth, respectRobots, skipLangVersions } = opts;
   const update = (data: Record<string, unknown>) =>
     prisma.crawlJob.update({ where: { id: jobId }, data }).catch(() => undefined);
 
   try {
-    const startUrlStr = await resolveStartUrl(opts.startUrl);
-    const startUrl = new URL(startUrlStr);
+    const start = await resolveStartUrl(opts.startUrl);
+    const startUrl = new URL(start.url);
+
+    // Language-version filter: pages under /xx/ prefixes of other languages are
+    // duplicates of the site's main language (e.g. the /by/ mirror on a ru site).
+    const allowedLangPrefixes = skipLangVersions
+      ? detectAllowedLangPrefixes(startUrl, start.html)
+      : null;
 
     let robots: RobotsRules | null = null;
     let sitemapHints: string[] = [];
@@ -93,6 +100,7 @@ export async function runCrawl(opts: StartCrawlOptions): Promise<void> {
       if (!url || url.origin !== startUrl.origin) continue;
       const key = queueKey(url);
       if (visited.has(key) || isNonHtmlPath(url.pathname)) continue;
+      if (isOtherLanguageVersion(url, allowedLangPrefixes)) continue;
       if (robots && !isAllowedByRobots(url, robots)) continue;
       visited.add(key);
       queue.push({ url, depth: 1 });
@@ -112,7 +120,7 @@ export async function runCrawl(opts: StartCrawlOptions): Promise<void> {
 
       const wave = queue.splice(0, Math.min(WAVE_SIZE, maxPages - pagesDone));
       const outcomes = await Promise.all(
-        wave.map((item) => fetchPage(item, { robots, maxDepth }))
+        wave.map((item) => fetchPage(item, { robots, maxDepth, allowedLangPrefixes }))
       );
 
       const rows: (CrawledPageData & { crawlId: string })[] = [];
@@ -155,30 +163,29 @@ export async function runCrawl(opts: StartCrawlOptions): Promise<void> {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-async function resolveStartUrl(rawUrl: string): Promise<string> {
+async function resolveStartUrl(rawUrl: string): Promise<{ url: string; html: string | null }> {
   const normalized = normalizeUrl(rawUrl);
   const message = "Сайт недоступен. Проверьте URL или попробуйте позже.";
-  const tryFetch = async (target: string) => {
+  const readPage = async (target: string) => {
     const res = await fetchWithTimeout(target);
     if (!res.ok) throw new Error(message);
-    return res;
+    const html = (await res.text()).slice(0, MAX_HTML_CHARS);
+    return { url: target, html };
   };
   try {
-    await tryFetch(normalized);
-    return normalized;
+    return await readPage(normalized);
   } catch {
     // Some sites fail on https but respond over plain http — same fallback as parser.ts.
     const explicit = /^https?:\/\//i.test(rawUrl.trim());
     if (explicit || !normalized.startsWith("https://")) throw new Error(message);
     const httpUrl = normalized.replace(/^https:\/\//, "http://");
-    await tryFetch(httpUrl);
-    return httpUrl;
+    return await readPage(httpUrl);
   }
 }
 
 async function fetchPage(
   item: QueueItem,
-  ctx: { robots: RobotsRules | null; maxDepth: number }
+  ctx: { robots: RobotsRules | null; maxDepth: number; allowedLangPrefixes: Set<string> | null }
 ): Promise<WaveOutcome> {
   const { url, depth } = item;
   try {
@@ -194,7 +201,7 @@ async function fetchPage(
       $('meta[property="og:title"]').attr("content")?.trim() ||
       `${url.hostname}${url.pathname}`;
     const markdown = buildMarkdown($, url, title);
-    const newLinks = collectLinks($, url, ctx.robots, ctx.maxDepth, depth);
+    const newLinks = collectLinks($, url, ctx, depth);
     if (markdown.length < MIN_MARKDOWN_CHARS) {
       // Hub page without content — still worth following its links.
       return { page: null, newLinks };
@@ -206,6 +213,26 @@ async function fetchPage(
   } catch {
     return { page: null, newLinks: [] };
   }
+}
+
+// A URL like /xx/… is treated as another language version when its first path
+// segment is a two-letter code outside the allowed set (start page lang + the
+// start URL's own prefix).
+function isOtherLanguageVersion(url: URL, allowed: Set<string> | null): boolean {
+  if (!allowed) return false;
+  const segment = url.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? "";
+  return /^[a-z]{2}$/.test(segment) && !allowed.has(segment);
+}
+
+function detectAllowedLangPrefixes(startUrl: URL, startHtml: string | null): Set<string> | null {
+  const allowed = new Set<string>();
+  const startSegment = startUrl.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? "";
+  if (/^[a-z]{2}$/.test(startSegment)) allowed.add(startSegment);
+  if (startHtml) {
+    const lang = startHtml.match(/<html[^>]*\blang=["']([a-zA-Z]{2})(?:[-_][^"']*)?["']/i)?.[1];
+    if (lang) allowed.add(lang.toLowerCase());
+  }
+  return allowed.size > 0 ? allowed : null;
 }
 
 function buildMarkdown($: cheerio.CheerioAPI, url: URL, title: string): string {
@@ -248,10 +275,10 @@ function bySectionPriority(a: QueueItem, b: QueueItem): number {
 function collectLinks(
   $: cheerio.CheerioAPI,
   pageUrl: URL,
-  rules: RobotsRules | null,
-  maxDepth: number,
+  ctx: { robots: RobotsRules | null; maxDepth: number; allowedLangPrefixes: Set<string> | null },
   currentDepth: number
 ): QueueItem[] {
+  const { robots, maxDepth, allowedLangPrefixes } = ctx;
   if (currentDepth >= maxDepth) return [];
   const seen = new Set<string>();
   const links: QueueItem[] = [];
@@ -261,7 +288,8 @@ function collectLinks(
     const resolved = resolveCrawlUrl(href, pageUrl);
     if (!resolved || resolved.origin !== pageUrl.origin) return;
     if (isNonHtmlPath(resolved.pathname)) return;
-    if (rules && !isAllowedByRobots(resolved, rules)) return;
+    if (isOtherLanguageVersion(resolved, allowedLangPrefixes)) return;
+    if (robots && !isAllowedByRobots(resolved, robots)) return;
     const key = queueKey(resolved);
     if (seen.has(key)) return;
     seen.add(key);
