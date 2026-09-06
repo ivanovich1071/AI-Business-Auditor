@@ -34,7 +34,8 @@ async function callOpenRouter(userContent: string, temperature = 0.3): Promise<s
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
+  // Agent generation with a big 235B model can legitimately run minutes.
+  const timer = setTimeout(() => controller.abort(), 180000);
   try {
     const res = await fetch(OPENROUTER_URL, {
       method: "POST",

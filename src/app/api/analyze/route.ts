@@ -110,7 +110,8 @@ export async function POST(req: NextRequest) {
       businessProcesses: industryAnalysis.business_processes,
       pains: industryAnalysis.pains,
     });
-  } catch {
+  } catch (err) {
+    console.error("[analyze] generateAgents failed:", err);
     return NextResponse.json(
       { error: "Извините, произошла ошибка. Попробуйте ещё раз." },
       { status: 502 }
