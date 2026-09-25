@@ -11,7 +11,20 @@ export function Header() {
           </span>
           <span className="text-2xl font-semibold tracking-tight">AI Business Auditor</span>
         </Link>
-        <div className="flex items-center gap-5">
+        <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-1">
+          {/* Отдельное приложение VM_SM (Docker) на том же сервере за nginx: /vmsm/ */}
+          <a
+            href="/vmsm/competitors"
+            className="text-sm font-medium text-accent-warm/70 hover:text-accent-warm transition-all duration-300"
+          >
+            Конкуренты
+          </a>
+          <a
+            href="/vmsm/factory"
+            className="text-sm font-medium text-accent-warm/70 hover:text-accent-warm transition-all duration-300"
+          >
+            Контент Завод
+          </a>
           <Link
             href="/crawler"
             className="text-sm font-medium text-accent-warm/70 hover:text-accent-warm transition-all duration-300"
